@@ -17,6 +17,11 @@ import complaintRoutes from './Routes/complaintRoutes.js';
 import adminRoutes from './Routes/adminRoutes.js';
 import chatRoutes from './Routes/chatRoutes.js';
 import userRoutes from './Routes/userRoutes.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Initialize express app
 const app = express();
@@ -63,22 +68,25 @@ app.use(hpp()); // Prevents HTTP Parameter Pollution (stops attackers from crash
 // 4. Rate Limiting to prevent DDoS
 app.use(globalLimiter);
 
-// 4. API Routes
+// 5. Serve Frontend Static Files (Vite Production Build)
+const frontendPath = path.join(__dirname, '../dist');
+app.use(express.static(frontendPath));
+
+// 6. API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/users', userRoutes);
 
-app.get('/', (req, res) => {
-    res.status(200).json({ 
-        message: 'Complaint Portal Backend Server is Running!',
-        status: 'Healthy',
-        activeConnections: 'Protected by Helmet, Compression & Rate-Limiting'
-    });
+// 7. Catch-all: Send all non-API requests to React's index.html
+app.get('*', (req, res) => {
+    if (!req.url.startsWith('/api')) {
+        res.sendFile(path.join(frontendPath, 'index.html'));
+    }
 });
 
-// 5. Error Handling Middleware (Catches unhandled errors so server doesn't crash)
+// 8. Error Handling Middleware (Catches unhandled errors so server doesn't crash)
 app.use(notFoundHandler);
 app.use(errorHandler);
 
