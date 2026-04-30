@@ -38,6 +38,7 @@ app.use(morgan('dev')); // Logs requests efficiently
 // Flexible CORS Policy for Production and Development
 const allowedOrigins = [
     'https://hunarmand.punjab.gov.pk',
+    'https://complaint.stackfellows.com', // Official Production Domain
     'https://complaint-portal-frontend.onrender.com', // Example Render URL
     'http://localhost:5173', // Vite default
     'http://localhost:3000'  // React default
