@@ -18,6 +18,7 @@ import adminRoutes from './Routes/adminRoutes.js';
 import chatRoutes from './Routes/chatRoutes.js';
 import userRoutes from './Routes/userRoutes.js';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -69,7 +70,17 @@ app.use(hpp()); // Prevents HTTP Parameter Pollution (stops attackers from crash
 app.use(globalLimiter);
 
 // 5. Serve Frontend Static Files (Vite Production Build)
-const frontendPath = path.join(__dirname, '../dist');
+let frontendPath = path.join(__dirname, '../dist'); // Default for local dev with backend subfolder
+
+// Robust path detection for Render/Production
+if (!fs.existsSync(path.join(frontendPath, 'index.html'))) {
+    frontendPath = path.join(__dirname, './dist'); // If dist is inside backend folder
+    if (!fs.existsSync(path.join(frontendPath, 'index.html'))) {
+        frontendPath = path.join(process.cwd(), 'dist'); // Check current working directory
+    }
+}
+
+console.log(`📂 Serving Frontend from: ${frontendPath}`);
 app.use(express.static(frontendPath));
 
 // 6. API Routes
@@ -82,7 +93,16 @@ app.use('/api/users', userRoutes);
 // 7. Catch-all: Send all non-API requests to React's index.html
 app.get('*', (req, res) => {
     if (!req.url.startsWith('/api')) {
-        res.sendFile(path.join(frontendPath, 'index.html'));
+        const indexPath = path.join(frontendPath, 'index.html');
+        if (fs.existsSync(indexPath)) {
+            res.sendFile(indexPath);
+        } else {
+            res.status(404).json({
+                success: false,
+                message: `Frontend build not found at ${frontendPath}. Please run 'npm run build' first.`,
+                tip: "Check your Render Build Command and Root Directory settings."
+            });
+        }
     }
 });
 
