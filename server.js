@@ -69,44 +69,22 @@ app.use(hpp()); // Prevents HTTP Parameter Pollution (stops attackers from crash
 // 4. Rate Limiting to prevent DDoS
 app.use(globalLimiter);
 
-// 5. Serve Frontend Static Files (Vite Production Build)
-let frontendPath = path.join(__dirname, '../dist'); // Default for local dev with backend subfolder
-
-// Robust path detection for Render/Production
-if (!fs.existsSync(path.join(frontendPath, 'index.html'))) {
-    frontendPath = path.join(__dirname, './dist'); // If dist is inside backend folder
-    if (!fs.existsSync(path.join(frontendPath, 'index.html'))) {
-        frontendPath = path.join(process.cwd(), 'dist'); // Check current working directory
-    }
-}
-
-console.log(`📂 Serving Frontend from: ${frontendPath}`);
-app.use(express.static(frontendPath));
-
-// 6. API Routes
+// 5. API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/users', userRoutes);
 
-// 7. Catch-all: Send all non-API requests to React's index.html
-app.get('*', (req, res) => {
-    if (!req.url.startsWith('/api')) {
-        const indexPath = path.join(frontendPath, 'index.html');
-        if (fs.existsSync(indexPath)) {
-            res.sendFile(indexPath);
-        } else {
-            res.status(404).json({
-                success: false,
-                message: `Frontend build not found at ${frontendPath}. Please run 'npm run build' first.`,
-                tip: "Check your Render Build Command and Root Directory settings."
-            });
-        }
-    }
+app.get('/', (req, res) => {
+    res.status(200).json({ 
+        message: 'Complaint Portal Backend Server is Running!',
+        status: 'Healthy',
+        activeConnections: 'Protected by Helmet, Compression & Rate-Limiting'
+    });
 });
 
-// 8. Error Handling Middleware (Catches unhandled errors so server doesn't crash)
+// 6. Error Handling Middleware (Catches unhandled errors so server doesn't crash)
 app.use(notFoundHandler);
 app.use(errorHandler);
 
