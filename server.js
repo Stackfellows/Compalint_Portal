@@ -16,6 +16,7 @@ import authRoutes from './Routes/authRoutes.js';
 import complaintRoutes from './Routes/complaintRoutes.js';
 import adminRoutes from './Routes/adminRoutes.js';
 import chatRoutes from './Routes/chatRoutes.js';
+import userRoutes from './Routes/userRoutes.js';
 
 // Initialize express app
 const app = express();
@@ -28,11 +29,27 @@ app.use(helmet()); // Protects against known web vulnerabilities by setting HTTP
 app.use(compression()); // Compresses JSON payloads to save bandwidth (crucial for 40k users)
 app.use(morgan('dev')); // Logs requests efficiently
 
-// Stricter CORS Policy (Only allow requests from specific origin in production)
+// Flexible CORS Policy for Production and Development
+const allowedOrigins = [
+    'https://hunarmand.punjab.gov.pk',
+    'https://complaint-portal-frontend.onrender.com', // Example Render URL
+    'http://localhost:5173', // Vite default
+    'http://localhost:3000'  // React default
+];
+
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production' ? 'https://hunarmand.punjab.gov.pk' : '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true,
+    optionsSuccessStatus: 200
 }));
 
 app.use(express.json({ limit: '1mb' })); // Limit JSON payload size to prevent memory overload
@@ -51,6 +68,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/users', userRoutes);
 
 app.get('/', (req, res) => {
     res.status(200).json({ 
