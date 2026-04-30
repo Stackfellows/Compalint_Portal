@@ -21,7 +21,7 @@ const generateComplaintId = async (department) => {
     return `HP-${deptCode}-${year}-${sequence}`;
 };
 
-import { upload } from '../Utils/cloudinary.js';
+import { upload, uploadToCloudinary } from '../Utils/cloudinary.js';
 
 // @desc    Create new complaint
 // @route   POST /api/complaints
@@ -36,12 +36,20 @@ router.post('/', protect, upload.array('attachments', 5), async (req, res, next)
 
         const complaintId = await generateComplaintId(department);
 
-        // Process uploaded files
-        const attachments = req.files ? req.files.map(file => ({
-            url: file.path,
-            publicId: file.filename,
-            name: file.originalname
-        })) : [];
+        // Modern: Manual Cloudinary Upload from memory
+        const attachments = [];
+        if (req.files && req.files.length > 0) {
+            const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer, 'complaints'));
+            const uploadResults = await Promise.all(uploadPromises);
+            
+            uploadResults.forEach((result, index) => {
+                attachments.push({
+                    url: result.secure_url,
+                    publicId: result.public_id,
+                    name: req.files[index].originalname
+                });
+            });
+        }
 
         const complaint = await Complaint.create({
             complaintId,
@@ -192,12 +200,20 @@ router.post('/:id/messages', protect, upload.array('attachments', 5), async (req
             }
         }
 
-        // Process uploaded files if any
-        const attachments = req.files ? req.files.map(file => ({
-            url: file.path,
-            publicId: file.filename,
-            name: file.originalname
-        })) : [];
+        // Modern: Manual Cloudinary Upload from memory for Chat
+        const attachments = [];
+        if (req.files && req.files.length > 0) {
+            const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer, 'chat_attachments'));
+            const uploadResults = await Promise.all(uploadPromises);
+            
+            uploadResults.forEach((result, index) => {
+                attachments.push({
+                    url: result.secure_url,
+                    publicId: result.public_id,
+                    name: req.files[index].originalname
+                });
+            });
+        }
 
         const newMessage = {
             sender: req.user._id,

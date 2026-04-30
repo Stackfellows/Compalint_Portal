@@ -67,16 +67,35 @@ app.use(errorHandler);
 // 6. Start Server with Graceful Shutdown Handling
 const PORT = process.env.PORT || 3200;
 
-const server = app.listen(PORT, () => {
-    console.log(`🚀 Secure Enterprise Server running on http://localhost:${PORT}`);
-    if (!process.env.JWT_SECRET) {
-        console.warn('⚠️ WARNING: JWT_SECRET is not defined in .env! Using default fallback.');
-    } else {
-        console.log('✅ JWT_SECRET loaded from .env');
-    }
+// Handle Uncaught Exceptions
+process.on('uncaughtException', (err) => {
+    console.error('🔥 UNCAUGHT EXCEPTION! Shutting down...');
+    console.error(err.name, err.message);
+    process.exit(1);
+});
+
+const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Secure Enterprise Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+    console.log('✅ Health Check: http://localhost:' + PORT);
+});
+
+// Handle Unhandled Rejections
+process.on('unhandledRejection', (err) => {
+    console.error('💥 UNHANDLED REJECTION! Shutting down...');
+    console.error(err.name, err.message);
+    server.close(() => {
+        process.exit(1);
+    });
 });
 
 // Graceful Shutdown - ensures current requests finish before killing the process
+process.on('SIGTERM', () => {
+    console.log('👋 SIGTERM received. Shutting down gracefully...');
+    server.close(() => {
+        console.log('💤 Process terminated.');
+    });
+});
+
 process.on('SIGINT', () => {
     console.log('🛑 SIGINT received. Shutting down gracefully...');
     server.close(() => {
