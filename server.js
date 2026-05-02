@@ -10,6 +10,7 @@ import xss from 'xss-clean';
 import hpp from 'hpp';
 
 import connectDB from './DB/db.js';
+import { initSocket } from './Utils/socket.js';
 import { globalLimiter } from './Middelware/rateLimiter.js';
 import { errorHandler, notFoundHandler } from './Middelware/errorHandler.js';
 import authRoutes from './Routes/authRoutes.js';
@@ -17,6 +18,7 @@ import complaintRoutes from './Routes/complaintRoutes.js';
 import adminRoutes from './Routes/adminRoutes.js';
 import chatRoutes from './Routes/chatRoutes.js';
 import userRoutes from './Routes/userRoutes.js';
+import managerRoutes from './Routes/managerRoutes.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -76,6 +78,7 @@ app.use('/api/complaints', complaintRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/manager', managerRoutes);
 
 app.get('/', (req, res) => {
     res.status(200).json({ 
@@ -103,6 +106,9 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Secure Enterprise Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
     console.log('✅ Health Check: http://localhost:' + PORT);
 });
+
+// Initialize Socket.io
+initSocket(server);
 
 // Handle Unhandled Rejections
 process.on('unhandledRejection', (err) => {

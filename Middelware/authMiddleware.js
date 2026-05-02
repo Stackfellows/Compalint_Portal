@@ -49,10 +49,19 @@ export const adminOnly = (req, res, next) => {
 };
 
 export const staffOrAdmin = (req, res, next) => {
-    if (req.user && (req.user.role === 'admin' || req.user.role === 'staff')) {
+    if (req.user && (req.user.role === 'admin' || req.user.role === 'staff' || req.user.role === 'manager')) {
         next();
     } else {
         res.status(403);
         next(new Error('Not authorized as staff or admin'));
+    }
+};
+
+export const managerOnly = (req, res, next) => {
+    if (req.user && (req.user.role === 'manager' || req.user.role === 'admin')) {
+        next();
+    } else {
+        res.status(403);
+        next(new Error('Not authorized as manager'));
     }
 };

@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Complaint from '../Models/Complaint.js';
 import Department from '../Models/Department.js';
 import { protect, staffOrAdmin } from '../Middelware/authMiddleware.js';
+import { notifyStaff, notifyUser } from '../Utils/socket.js';
 
 const router = express.Router();
 
@@ -39,7 +40,7 @@ router.post('/', protect, upload.array('attachments', 5), async (req, res, next)
         // Modern: Manual Cloudinary Upload from memory
         const attachments = [];
         if (req.files && req.files.length > 0) {
-            const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer, 'complaints'));
+            const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer, 'complaints', file.originalname));
             const uploadResults = await Promise.all(uploadPromises);
             
             uploadResults.forEach((result, index) => {
@@ -61,6 +62,9 @@ router.post('/', protect, upload.array('attachments', 5), async (req, res, next)
             priority: priority || 'Medium',
             attachments
         });
+
+        // Notify Staff/Admin about new complaint
+        notifyStaff('new_complaint', `New Complaint: ${subject}`, { complaintId: complaint._id });
 
         res.status(201).json({
             success: true,
@@ -203,7 +207,7 @@ router.post('/:id/messages', protect, upload.array('attachments', 5), async (req
         // Modern: Manual Cloudinary Upload from memory for Chat
         const attachments = [];
         if (req.files && req.files.length > 0) {
-            const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer, 'chat_attachments'));
+            const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer, 'chat_attachments', file.originalname));
             const uploadResults = await Promise.all(uploadPromises);
             
             uploadResults.forEach((result, index) => {
@@ -224,6 +228,15 @@ router.post('/:id/messages', protect, upload.array('attachments', 5), async (req
 
         complaint.messages.push(newMessage);
         await complaint.save();
+
+        // Notify the other party
+        if (req.user.role === 'student') {
+            // Student messaged, notify staff (simplified as global staff notify for now)
+            notifyStaff('new_message', `New message on ${complaint.complaintId}`, { complaintId: complaint._id });
+        } else {
+            // Staff/Admin messaged, notify the student
+            notifyUser(complaint.user.toString(), 'new_message', `Staff replied to your complaint ${complaint.complaintId}`, { complaintId: complaint._id });
+        }
 
         res.status(201).json({
             success: true,
