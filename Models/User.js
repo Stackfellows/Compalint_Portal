@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema({
     
     // Staff specific fields
     department: { type: String },
+    assignedSubDepartments: { type: [String], default: [] },
     status: { type: String, enum: ['Active', 'Leave'], default: 'Active' },
 }, { timestamps: true });
 

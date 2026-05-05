@@ -46,7 +46,7 @@ router.get('/staff', protect, adminOnly, async (req, res, next) => {
 // @route   POST /api/admin/staff
 router.post('/staff', protect, adminOnly, async (req, res, next) => {
     try {
-        const { name, email, password, department, phone } = req.body;
+        const { name, email, password, department, assignedSubDepartments, phone } = req.body;
 
         const userExists = await User.findOne({ email });
         if (userExists) {
@@ -59,6 +59,7 @@ router.post('/staff', protect, adminOnly, async (req, res, next) => {
             email,
             password,
             department,
+            assignedSubDepartments: assignedSubDepartments || [],
             phone,
             role: 'staff'
         });
@@ -72,7 +73,45 @@ router.post('/staff', protect, adminOnly, async (req, res, next) => {
                 name: staff.name,
                 email: staff.email,
                 role: staff.role,
-                department: staff.department
+                department: staff.department,
+                assignedSubDepartments: staff.assignedSubDepartments
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// @desc    Update staff member
+// @route   PUT /api/admin/staff/:id
+router.put('/staff/:id', protect, adminOnly, async (req, res, next) => {
+    try {
+        const { name, email, department, assignedSubDepartments, phone, role } = req.body;
+        const staff = await User.findById(req.params.id);
+
+        if (!staff) {
+            res.status(404);
+            throw new Error('Staff member not found');
+        }
+
+        staff.name = name || staff.name;
+        staff.email = email || staff.email;
+        staff.department = department || staff.department;
+        staff.assignedSubDepartments = assignedSubDepartments || staff.assignedSubDepartments;
+        staff.phone = phone || staff.phone;
+        staff.role = role || staff.role;
+
+        const updatedStaff = await staff.save();
+        res.json({
+            success: true,
+            staff: {
+                _id: updatedStaff._id,
+                name: updatedStaff.name,
+                email: updatedStaff.email,
+                role: updatedStaff.role,
+                department: updatedStaff.department,
+                assignedSubDepartments: updatedStaff.assignedSubDepartments,
+                phone: updatedStaff.phone
             }
         });
     } catch (error) {
@@ -101,24 +140,32 @@ router.delete('/staff/:id', protect, adminOnly, async (req, res, next) => {
 // @route   GET /api/admin/stats
 router.get('/stats', protect, adminOnly, async (req, res, next) => {
     try {
-        const totalComplaints = await Complaint.countDocuments();
-        const openComplaints = await Complaint.countDocuments({ status: 'Open' });
-        const resolvedComplaints = await Complaint.countDocuments({ status: 'Resolved' });
-        const inProgressComplaints = await Complaint.countDocuments({ status: 'In Progress' });
-        
-        const totalUsers = await User.countDocuments({ role: 'student' });
-        const totalStaff = await User.countDocuments({ role: 'staff' });
+        const { filter = 'all' } = req.query;
+        let query = {};
 
-        // Debug: Log all staff departments
-        const allStaff = await User.find({ role: 'staff' }).select('department');
-        console.log('🔍 Current Staff Assignments:', allStaff.map(s => s.department));
+        if (filter !== 'all') {
+            const now = new Date();
+            let startDate = new Date();
+            if (filter === 'daily') startDate.setHours(now.getHours() - 24);
+            else if (filter === 'weekly') startDate.setDate(now.getDate() - 7);
+            else if (filter === 'monthly') startDate.setMonth(now.getMonth() - 1);
+            else if (filter === 'yearly') startDate.setFullYear(now.getFullYear() - 1);
+            query.createdAt = { $gte: startDate };
+        }
+
+        const totalComplaints = await Complaint.countDocuments(query);
+        const openComplaints = await Complaint.countDocuments({ ...query, status: 'Open' });
+        const resolvedComplaints = await Complaint.countDocuments({ ...query, status: 'Resolved' });
+        const inProgressComplaints = await Complaint.countDocuments({ ...query, status: 'In Progress' });
+        
+        const totalUsers = await User.countDocuments({ role: 'student', ...query });
+        const totalStaff = await User.countDocuments({ role: 'staff' }); // Staff count usually global
 
         // Department wise breakdown
         const depts = await Department.find({});
         const deptStats = {};
         
         for (const d of depts) {
-            // Use regex for case-insensitive and flexible matching
             const deptRegex = new RegExp(`^${d.name.trim()}$`, 'i');
             
             const staffCount = await User.countDocuments({ 
@@ -128,10 +175,10 @@ router.get('/stats', protect, adminOnly, async (req, res, next) => {
             
             const openCount = await Complaint.countDocuments({ 
                 department: deptRegex, 
-                status: 'Open' 
+                status: 'Open',
+                ...query
             });
             
-            console.log(`📊 Stats for "${d.name}": Found ${staffCount} staff and ${openCount} open tickets using regex: ${deptRegex}`);
             deptStats[d.name] = { staff: staffCount, open: openCount };
         }
 
@@ -148,8 +195,7 @@ router.get('/stats', protect, adminOnly, async (req, res, next) => {
                     students: totalUsers,
                     staff: totalStaff
                 },
-                deptStats,
-                debugStaff: allStaff.map(s => s.department) // Added for debugging
+                deptStats
             }
         });
     } catch (error) {
@@ -234,15 +280,36 @@ router.get('/reports', protect, adminOnly, async (req, res, next) => {
     }
 });
 
-// @desc    Get all departments
+// @desc    Get all departments with stats
 // @route   GET /api/admin/departments
 router.get('/departments', protect, adminOnly, async (req, res, next) => {
     try {
         const departments = await Department.find({});
-        console.log(`🔍 Found ${departments.length} departments in DB`);
+        
+        const enrichedDepartments = await Promise.all(departments.map(async (d) => {
+            const deptRegex = new RegExp(`^${d.name.trim()}$`, 'i');
+            
+            const staffCount = await User.countDocuments({ 
+                role: { $in: ['staff', 'manager'] }, 
+                department: deptRegex 
+            });
+            
+            const activeTickets = await Complaint.countDocuments({ 
+                department: deptRegex, 
+                status: { $in: ['Open', 'In Progress', 'Review'] } 
+            });
+
+            return {
+                ...d.toObject(),
+                staffCount,
+                activeTickets
+            };
+        }));
+
+        console.log(`🔍 Found ${departments.length} departments in DB with stats`);
         res.json({
             success: true,
-            departments
+            departments: enrichedDepartments
         });
     } catch (error) {
         next(error);
@@ -289,6 +356,28 @@ router.patch('/staff/:id/status', protect, adminOnly, async (req, res, next) => 
         staff.status = status;
         await staff.save();
         res.json(staff);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// @desc    Get all students
+// @route   GET /api/admin/students
+router.get('/students', protect, adminOnly, async (req, res, next) => {
+    try {
+        const students = await User.find({ role: 'student' }).select('-password').sort({ createdAt: -1 });
+        res.json({ success: true, students });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// @desc    Delete a student
+// @route   DELETE /api/admin/students/:id
+router.delete('/students/:id', protect, adminOnly, async (req, res, next) => {
+    try {
+        await User.findByIdAndDelete(req.params.id);
+        res.json({ success: true, message: 'Student account deleted' });
     } catch (error) {
         next(error);
     }

@@ -19,6 +19,7 @@ import adminRoutes from './Routes/adminRoutes.js';
 import chatRoutes from './Routes/chatRoutes.js';
 import userRoutes from './Routes/userRoutes.js';
 import managerRoutes from './Routes/managerRoutes.js';
+import announcementRoutes from './Routes/announcementRoutes.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -79,6 +80,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/manager', managerRoutes);
+app.use('/api/announcements', announcementRoutes);
 
 app.get('/', (req, res) => {
     res.status(200).json({ 

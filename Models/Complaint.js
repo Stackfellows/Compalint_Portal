@@ -35,6 +35,8 @@ const complaintSchema = new mongoose.Schema({
     }],
     messages: [messageSchema],
     assignedTo: { type: mongoose.Schema.Types.Mixed }, // Support for hardcoded admin ID string
+    rating: { type: Number, min: 1, max: 5 },
+    feedback: { type: String },
 }, { timestamps: true });
 
 export default mongoose.model('Complaint', complaintSchema);

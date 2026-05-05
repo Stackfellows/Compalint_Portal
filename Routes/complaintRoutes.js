@@ -12,12 +12,12 @@ const generateComplaintId = async (department) => {
     const date = new Date();
     const year = date.getFullYear();
     const deptCode = department.substring(0, 3).toUpperCase();
-    
+
     // Find the count of complaints for this year to increment the sequence
     const count = await Complaint.countDocuments({
         complaintId: new RegExp(`HP-${deptCode}-${year}-`)
     });
-    
+
     const sequence = (count + 1).toString().padStart(4, '0');
     return `HP-${deptCode}-${year}-${sequence}`;
 };
@@ -42,7 +42,7 @@ router.post('/', protect, upload.array('attachments', 5), async (req, res, next)
         if (req.files && req.files.length > 0) {
             const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer, 'complaints', file.originalname));
             const uploadResults = await Promise.all(uploadPromises);
-            
+
             uploadResults.forEach((result, index) => {
                 attachments.push({
                     url: result.secure_url,
@@ -79,20 +79,38 @@ router.post('/', protect, upload.array('attachments', 5), async (req, res, next)
 // @route   GET /api/complaints
 router.get('/', protect, async (req, res, next) => {
     try {
+        const { filter = 'all' } = req.query;
         let query = {};
 
         // If user is a student, only show their complaints
         if (req.user.role === 'student') {
             query.user = req.user._id;
-        } 
-        
+        }
+
         // If staff, show complaints for their department
         if (req.user.role === 'staff') {
             query.department = req.user.department;
+            
+            // Only filter by sub-department if they have specific ones assigned
+            if (req.user.assignedSubDepartments && req.user.assignedSubDepartments.length > 0) {
+                query.subDepartment = { $in: req.user.assignedSubDepartments };
+            }
+        }
+
+        // Apply time filter
+        if (filter !== 'all') {
+            const now = new Date();
+            let startDate = new Date();
+            if (filter === 'daily') startDate.setHours(now.getHours() - 24);
+            else if (filter === 'weekly') startDate.setDate(now.getDate() - 7);
+            else if (filter === 'monthly') startDate.setMonth(now.getMonth() - 1);
+            else if (filter === 'yearly') startDate.setFullYear(now.getFullYear() - 1);
+            query.createdAt = { $gte: startDate };
         }
 
         const complaints = await Complaint.find(query)
             .populate('user', 'name email role cnic rollNo')
+            .populate('assignedTo', 'name role')
             .sort({ createdAt: -1 });
 
         res.json({
@@ -126,6 +144,7 @@ router.get('/:id', protect, async (req, res, next) => {
     try {
         const complaint = await Complaint.findById(req.params.id)
             .populate('user', 'name email role cnic phone rollNo')
+            .populate('assignedTo', 'name role')
             .populate('messages.sender', 'name role');
 
         if (!complaint) {
@@ -160,7 +179,7 @@ router.put('/:id/status', protect, staffOrAdmin, async (req, res, next) => {
         }
 
         complaint.status = status;
-        
+
         // Automatically assign the ticket to the staff/admin who is handling it
         // Only if they have a valid MongoDB ObjectId (skips hardcoded admin string IDs)
         if (mongoose.Types.ObjectId.isValid(req.user._id)) {
@@ -197,7 +216,7 @@ router.post('/:id/messages', protect, upload.array('attachments', 5), async (req
                 res.status(403);
                 throw new Error('Not authorized to message on this complaint');
             }
-            
+
             if (complaint.status === 'Closed') {
                 res.status(400);
                 throw new Error('This complaint is closed. Please create a new complaint for further assistance.');
@@ -209,7 +228,7 @@ router.post('/:id/messages', protect, upload.array('attachments', 5), async (req
         if (req.files && req.files.length > 0) {
             const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer, 'chat_attachments', file.originalname));
             const uploadResults = await Promise.all(uploadPromises);
-            
+
             uploadResults.forEach((result, index) => {
                 attachments.push({
                     url: result.secure_url,
@@ -241,6 +260,72 @@ router.post('/:id/messages', protect, upload.array('attachments', 5), async (req
         res.status(201).json({
             success: true,
             message: newMessage
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// @desc    Delete complaint
+// @route   DELETE /api/complaints/:id
+router.delete('/:id', protect, staffOrAdmin, async (req, res, next) => {
+    try {
+        const complaint = await Complaint.findById(req.params.id);
+
+        if (!complaint) {
+            res.status(404);
+            throw new Error('Complaint not found');
+        }
+
+        // Only Admin can delete (optional: if you want to restrict this even further)
+        if (req.user.role !== 'admin') {
+            res.status(403);
+            throw new Error('Not authorized to delete complaints');
+        }
+
+        await Complaint.findByIdAndDelete(req.params.id);
+
+        res.json({
+            success: true,
+            message: 'Complaint deleted successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// @desc    Rate a complaint
+// @route   POST /api/complaints/:id/rate
+router.post('/:id/rate', protect, async (req, res, next) => {
+    try {
+        const { rating, feedback } = req.body;
+        const complaint = await Complaint.findById(req.params.id);
+
+        if (!complaint) {
+            res.status(404);
+            throw new Error('Complaint not found');
+        }
+
+        // Authorization: only the owner can rate
+        if (complaint.user.toString() !== req.user._id.toString()) {
+            res.status(403);
+            throw new Error('Not authorized to rate this complaint');
+        }
+
+        // Only resolved or closed complaints can be rated
+        if (!['Resolved', 'Closed'].includes(complaint.status)) {
+            res.status(400);
+            throw new Error('You can only rate resolved or closed complaints');
+        }
+
+        complaint.rating = rating;
+        complaint.feedback = feedback;
+        await complaint.save();
+
+        res.json({
+            success: true,
+            message: 'Thank you for your feedback!',
+            complaint
         });
     } catch (error) {
         next(error);

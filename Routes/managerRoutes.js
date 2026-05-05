@@ -9,11 +9,24 @@ const router = express.Router();
 // @route   GET /api/manager/stats
 router.get('/stats', protect, managerOnly, async (req, res, next) => {
     try {
-        const totalComplaints   = await Complaint.countDocuments();
-        const openComplaints    = await Complaint.countDocuments({ status: 'Open' });
-        const inProgress        = await Complaint.countDocuments({ status: 'In Progress' });
-        const underReview       = await Complaint.countDocuments({ status: 'Review' });
-        const resolved          = await Complaint.countDocuments({ status: { $in: ['Resolved', 'Closed'] } });
+        const { filter = 'all' } = req.query;
+        let query = {};
+
+        if (filter !== 'all') {
+            const now = new Date();
+            let startDate = new Date();
+            if (filter === 'daily') startDate.setHours(now.getHours() - 24);
+            else if (filter === 'weekly') startDate.setDate(now.getDate() - 7);
+            else if (filter === 'monthly') startDate.setMonth(now.getMonth() - 1);
+            else if (filter === 'yearly') startDate.setFullYear(now.getFullYear() - 1);
+            query.createdAt = { $gte: startDate };
+        }
+
+        const totalComplaints   = await Complaint.countDocuments(query);
+        const openComplaints    = await Complaint.countDocuments({ ...query, status: 'Open' });
+        const inProgress        = await Complaint.countDocuments({ ...query, status: 'In Progress' });
+        const underReview       = await Complaint.countDocuments({ ...query, status: 'Review' });
+        const resolved          = await Complaint.countDocuments({ ...query, status: { $in: ['Resolved', 'Closed'] } });
         const totalStaff        = await User.countDocuments({ role: 'staff' });
         const activeStaff       = await User.countDocuments({ role: 'staff', status: 'Active' });
 
@@ -54,15 +67,28 @@ router.get('/stats', protect, managerOnly, async (req, res, next) => {
 // @route   GET /api/manager/team-performance
 router.get('/team-performance', protect, managerOnly, async (req, res, next) => {
     try {
+        const { filter = 'all' } = req.query;
+        let query = {};
+
+        if (filter !== 'all') {
+            const now = new Date();
+            let startDate = new Date();
+            if (filter === 'daily') startDate.setHours(now.getHours() - 24);
+            else if (filter === 'weekly') startDate.setDate(now.getDate() - 7);
+            else if (filter === 'monthly') startDate.setMonth(now.getMonth() - 1);
+            else if (filter === 'yearly') startDate.setFullYear(now.getFullYear() - 1);
+            query.createdAt = { $gte: startDate };
+        }
+
         const staffMembers = await User.find({ role: 'staff' }).select('-password').lean();
 
         const teamData = await Promise.all(staffMembers.map(async (staff) => {
             // Tickets directly assigned to them
-            const assigned    = await Complaint.countDocuments({ assignedTo: staff._id });
-            const resolved    = await Complaint.countDocuments({ assignedTo: staff._id, status: { $in: ['Resolved', 'Closed'] } });
-            const inProgress  = await Complaint.countDocuments({ assignedTo: staff._id, status: 'In Progress' });
-            const underReview = await Complaint.countDocuments({ assignedTo: staff._id, status: 'Review' });
-            const open        = await Complaint.countDocuments({ assignedTo: staff._id, status: 'Open' });
+            const assigned    = await Complaint.countDocuments({ ...query, assignedTo: staff._id });
+            const resolved    = await Complaint.countDocuments({ ...query, assignedTo: staff._id, status: { $in: ['Resolved', 'Closed'] } });
+            const inProgress  = await Complaint.countDocuments({ ...query, assignedTo: staff._id, status: 'In Progress' });
+            const underReview = await Complaint.countDocuments({ ...query, assignedTo: staff._id, status: 'Review' });
+            const open        = await Complaint.countDocuments({ ...query, assignedTo: staff._id, status: 'Open' });
 
             // Messages sent (activity measure)
             const complaintsWhereMessaged = await Complaint.countDocuments({ 'messages.sender': staff._id });
@@ -136,13 +162,26 @@ router.get('/complaints', protect, managerOnly, async (req, res, next) => {
 // @route   GET /api/manager/department-stats
 router.get('/department-stats', protect, managerOnly, async (req, res, next) => {
     try {
+        const { filter = 'all' } = req.query;
+        let query = {};
+
+        if (filter !== 'all') {
+            const now = new Date();
+            let startDate = new Date();
+            if (filter === 'daily') startDate.setHours(now.getHours() - 24);
+            else if (filter === 'weekly') startDate.setDate(now.getDate() - 7);
+            else if (filter === 'monthly') startDate.setMonth(now.getMonth() - 1);
+            else if (filter === 'yearly') startDate.setFullYear(now.getFullYear() - 1);
+            query.createdAt = { $gte: startDate };
+        }
+
         // Get all unique departments from complaints
         const deptList = await Complaint.distinct('department');
 
         const deptStats = await Promise.all(deptList.map(async (dept) => {
-            const total    = await Complaint.countDocuments({ department: dept });
-            const open     = await Complaint.countDocuments({ department: dept, status: 'Open' });
-            const resolved = await Complaint.countDocuments({ department: dept, status: { $in: ['Resolved', 'Closed'] } });
+            const total    = await Complaint.countDocuments({ ...query, department: dept });
+            const open     = await Complaint.countDocuments({ ...query, department: dept, status: 'Open' });
+            const resolved = await Complaint.countDocuments({ ...query, department: dept, status: { $in: ['Resolved', 'Closed'] } });
             const staff    = await User.countDocuments({ role: 'staff', department: dept });
             const efficiency = total > 0 ? Math.round((resolved / total) * 100) : 0;
 
