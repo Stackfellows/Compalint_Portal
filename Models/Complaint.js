@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const messageSchema = new mongoose.Schema({
-    sender: { type: mongoose.Schema.Types.Mixed, required: true }, // Support for hardcoded admin ID string
+    sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     content: { type: String, required: true },
     attachments: [{
         url: String,
@@ -34,7 +34,7 @@ const complaintSchema = new mongoose.Schema({
         name: String
     }],
     messages: [messageSchema],
-    assignedTo: { type: mongoose.Schema.Types.Mixed }, // Support for hardcoded admin ID string
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     rating: { type: Number, min: 1, max: 5 },
     feedback: { type: String },
 }, { timestamps: true });

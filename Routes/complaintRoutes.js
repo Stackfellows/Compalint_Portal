@@ -223,6 +223,11 @@ router.post('/:id/messages', protect, upload.array('attachments', 5), async (req
             }
         }
 
+        if (req.user.role === 'manager') {
+            res.status(403);
+            throw new Error('Managers have view-only access and cannot post messages');
+        }
+
         // Modern: Manual Cloudinary Upload from memory for Chat
         const attachments = [];
         if (req.files && req.files.length > 0) {
