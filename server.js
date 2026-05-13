@@ -41,19 +41,27 @@ app.use(morgan('dev')); // Logs requests efficiently
 // Flexible CORS Policy for Production and Development
 const allowedOrigins = [
     'https://hunarmand.punjab.gov.pk',
-    'https://complaint.stackfellows.com', // Official Production Domain
-    'https://complaint-portal-frontend.onrender.com', // Example Render URL
-    'http://localhost:5173', // Vite default
-    'http://localhost:3000'  // React default
+    'https://complaint.hunarmandpunjab.org.pk',
+    'https://www.complaint.hunarmandpunjab.org.pk',
+    'https://complaint.stackfellows.com',
+    'https://complaint-portal-frontend.onrender.com',
+    'http://localhost:5173',
+    'http://localhost:3000'
 ];
 
 app.use(cors({
     origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+        
+        // Remove trailing slash for comparison
+        const normalizedOrigin = origin.replace(/\/$/, "");
+        const isAllowed = allowedOrigins.some(allowed => allowed.replace(/\/$/, "") === normalizedOrigin);
+
+        if (isAllowed || process.env.NODE_ENV !== 'production') {
             callback(null, true);
         } else {
+            console.warn(`CORS blocked for origin: ${origin}`);
             callback(new Error('Not allowed by CORS'));
         }
     },
