@@ -44,7 +44,7 @@ const allowedOrigins = [
     'https://complaint.hunarmandpunjab.org.pk',
     'https://www.complaint.hunarmandpunjab.org.pk',
     'https://complaint.stackfellows.com',
-    'https://complaint-portal-frontend.onrender.com',
+    // 'https://complaint-portal-frontend.onrender.com',
     'http://localhost:5173',
     'http://localhost:3000'
 ];

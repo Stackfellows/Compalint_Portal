@@ -34,6 +34,11 @@ const complaintSchema = new mongoose.Schema({
         name: String
     }],
     messages: [messageSchema],
+    internalNotes: [{
+        sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        content: String,
+        timestamp: { type: Date, default: Date.now }
+    }],
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     rating: { type: Number, min: 1, max: 5 },
     feedback: { type: String },

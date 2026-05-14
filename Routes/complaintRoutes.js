@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import Complaint from '../Models/Complaint.js';
 import Department from '../Models/Department.js';
+import User from '../Models/User.js';
 import { protect, staffOrAdmin } from '../Middelware/authMiddleware.js';
 import { notifyStaff, notifyUser } from '../Utils/socket.js';
 
@@ -52,6 +53,21 @@ router.post('/', protect, upload.array('attachments', 5), async (req, res, next)
             });
         }
 
+        // Auto-reply message from Team/System
+        // Try to find an Admin, then Manager, then Staff as the sender
+        let systemSender = await User.findOne({ role: 'admin' });
+        if (!systemSender) systemSender = await User.findOne({ role: 'manager' });
+        if (!systemSender) systemSender = await User.findOne({ role: 'staff' });
+        
+        // Fallback to student themselves if no staff/admin exists yet (rare case)
+        const senderId = systemSender ? systemSender._id : req.user._id;
+
+        const messages = [{
+            sender: senderId,
+            content: `Dear Customer,\n\nThank you for contacting the Hunarmand team. Your complaint/reference number (${complaintId}) has been received successfully. Our team will get in touch with you shortly to assist you further.`,
+            timestamp: new Date()
+        }];
+
         const complaint = await Complaint.create({
             complaintId,
             user: req.user._id,
@@ -60,7 +76,8 @@ router.post('/', protect, upload.array('attachments', 5), async (req, res, next)
             subject,
             description,
             priority: priority || 'Medium',
-            attachments
+            attachments,
+            messages
         });
 
         // Notify Staff/Admin about new complaint
@@ -145,7 +162,8 @@ router.get('/:id', protect, async (req, res, next) => {
         const complaint = await Complaint.findById(req.params.id)
             .populate('user', 'name email role cnic phone rollNo')
             .populate('assignedTo', 'name role')
-            .populate('messages.sender', 'name role');
+            .populate('messages.sender', 'name role')
+            .populate('internalNotes.sender', 'name role');
 
         if (!complaint) {
             res.status(404);
@@ -156,6 +174,11 @@ router.get('/:id', protect, async (req, res, next) => {
         if (req.user.role === 'student' && complaint.user._id.toString() !== req.user._id.toString()) {
             res.status(403);
             throw new Error('Not authorized to view this complaint');
+        }
+
+        // Hide internalNotes from students
+        if (req.user.role === 'student') {
+            complaint.internalNotes = undefined;
         }
 
         res.json({
@@ -194,6 +217,30 @@ router.put('/:id/status', protect, staffOrAdmin, async (req, res, next) => {
         });
     } catch (error) {
         console.error('Status Update Error:', error.message);
+        next(error);
+    }
+});
+
+// @desc    Update complaint priority
+// @route   PUT /api/complaints/:id/priority
+router.put('/:id/priority', protect, staffOrAdmin, async (req, res, next) => {
+    try {
+        const { priority } = req.body;
+        const complaint = await Complaint.findById(req.params.id);
+
+        if (!complaint) {
+            res.status(404);
+            throw new Error('Complaint not found');
+        }
+
+        complaint.priority = priority;
+        await complaint.save();
+
+        res.json({
+            success: true,
+            complaint
+        });
+    } catch (error) {
         next(error);
     }
 });
@@ -331,6 +378,36 @@ router.post('/:id/rate', protect, async (req, res, next) => {
             success: true,
             message: 'Thank you for your feedback!',
             complaint
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// @desc    Add internal note to complaint
+// @route   POST /api/complaints/:id/internal-notes
+router.post('/:id/internal-notes', protect, staffOrAdmin, async (req, res, next) => {
+    try {
+        const { content } = req.body;
+        const complaint = await Complaint.findById(req.params.id);
+
+        if (!complaint) {
+            res.status(404);
+            throw new Error('Complaint not found');
+        }
+
+        const newNote = {
+            sender: req.user._id,
+            content,
+            timestamp: new Date()
+        };
+
+        complaint.internalNotes.push(newNote);
+        await complaint.save();
+
+        res.status(201).json({
+            success: true,
+            note: newNote
         });
     } catch (error) {
         next(error);

@@ -112,6 +112,7 @@ router.get('/team-performance', protect, managerOnly, async (req, res, next) => 
                 name: staff.name,
                 email: staff.email,
                 department: staff.department,
+                assignedSubDepartments: staff.assignedSubDepartments,
                 status: staff.status,
                 stats: {
                     assigned,
