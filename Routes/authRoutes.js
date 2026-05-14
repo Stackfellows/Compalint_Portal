@@ -125,4 +125,100 @@ router.post('/login', apiLimiter, async (req, res, next) => {
     }
 });
 
+// @desc    Auth student (Login/Signup from external DB)
+// @route   POST /api/auth/student-login
+router.post('/student-login', apiLimiter, async (req, res, next) => {
+    try {
+        const { name, email, password, rollNo } = req.body;
+
+        if (!email || !password) {
+            res.status(400);
+            throw new Error('Please provide email and password');
+        }
+
+        // 1. Check if user already exists in local DB
+        let user = await User.findOne({ email });
+
+        if (user) {
+            // Student already registered in local system
+            const isMatch = await user.matchPassword(password);
+            if (isMatch) {
+                return res.json({
+                    success: true,
+                    user: {
+                        _id: user._id,
+                        name: user.name,
+                        email: user.email,
+                        role: user.role,
+                        cnic: user.cnic,
+                        rollNo: user.rollNo,
+                        phone: user.phone,
+                    },
+                    token: generateToken(user._id),
+                });
+            } else {
+                res.status(401);
+                throw new Error('Invalid password');
+            }
+        }
+
+        // 2. If user doesn't exist locally, they need rollNo to verify against Hunarmand DB
+        if (!rollNo) {
+            res.status(400);
+            throw new Error('Roll Number is required for first-time student login to verify your identity');
+        }
+        
+        if (!name) {
+            res.status(400);
+            throw new Error('Student Name is required for first-time login account creation');
+        }
+
+        // 3. Verify in Hunarmand External DB
+        const { hunarmandDbConnection } = await import('../DB/db.js');
+        
+        if (!hunarmandDbConnection || hunarmandDbConnection.readyState !== 1) {
+            res.status(500);
+            throw new Error('Database connection to Hunarmand Verification System is currently unavailable');
+        }
+
+        const externalUser = await hunarmandDbConnection.collection('users').findOne({
+            email: email,
+            rollNumber: rollNo
+        });
+
+        if (!externalUser) {
+            res.status(401);
+            throw new Error('We could not find a Hunarmand Punjab student with this email and roll number.');
+        }
+
+        // 4. Create new User in Local DB with the provided password
+        user = await User.create({
+            name: name || externalUser.fullName || externalUser.name || 'Student',
+            email: email,
+            password: password,
+            cnic: externalUser.cnic || '',
+            rollNo: rollNo,
+            phone: externalUser.mobile || externalUser.phone || '',
+            role: 'student'
+        });
+
+        res.status(201).json({
+            success: true,
+            user: {
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                cnic: user.cnic,
+                rollNo: user.rollNo,
+                phone: user.phone,
+            },
+            token: generateToken(user._id),
+        });
+
+    } catch (error) {
+        next(error);
+    }
+});
+
 export default router;

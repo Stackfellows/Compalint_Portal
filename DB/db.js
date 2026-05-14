@@ -7,6 +7,8 @@ dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 dotenv.config();
 
+let hunarmandDbConnection = null;
+
 const connectDB = async () => {
     try {
         // High Concurrency Tuning for 40,000+ users
@@ -16,6 +18,19 @@ const connectDB = async () => {
             socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
         });
         console.log(`✅ MongoDB Connected (High Concurrency Pool): ${conn.connection.host}`);
+        
+        // Connect to Hunarmand PRD DB for Student Verification
+        if (process.env.HUNARMAND_DB_URI) {
+            hunarmandDbConnection = mongoose.createConnection(process.env.HUNARMAND_DB_URI, {
+                maxPoolSize: 50,
+            });
+            hunarmandDbConnection.on('connected', () => {
+                console.log(`✅ Hunarmand DB Connected for Verification.`);
+            });
+            hunarmandDbConnection.on('error', (err) => {
+                console.error(`❌ Hunarmand DB Connection Error: ${err.message}`);
+            });
+        }
     } catch (error) {
         console.error(`❌ MongoDB Connection Error: ${error.message}`);
         process.exit(1);
@@ -31,4 +46,5 @@ mongoose.connection.on('reconnected', () => {
     console.log('✅ MongoDB reconnected successfully.');
 });
 
+export { connectDB, hunarmandDbConnection };
 export default connectDB;
