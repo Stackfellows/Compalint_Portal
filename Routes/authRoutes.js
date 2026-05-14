@@ -1,5 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import { MongoClient } from 'mongodb';
 import User from '../Models/User.js';
 import { apiLimiter } from '../Middelware/rateLimiter.js';
 
@@ -173,18 +174,34 @@ router.post('/student-login', apiLimiter, async (req, res, next) => {
             throw new Error('Student Name is required for first-time login account creation');
         }
 
-        // 3. Verify in Hunarmand External DB
-        const { hunarmandDbConnection } = await import('../DB/db.js');
+        // 3. Verify in Hunarmand External DB (on-demand connection)
+        const hunarmandUri = process.env.HUNARMAND_DB_URI;
         
-        if (!hunarmandDbConnection || hunarmandDbConnection.readyState !== 1) {
+        if (!hunarmandUri) {
             res.status(500);
-            throw new Error('Database connection to Hunarmand Verification System is currently unavailable');
+            throw new Error('Hunarmand DB URI is not configured on this server. Please contact admin.');
         }
 
-        const externalUser = await hunarmandDbConnection.collection('users').findOne({
-            email: email,
-            rollNumber: rollNo
+        let externalUser = null;
+        const client = new MongoClient(hunarmandUri, {
+            serverSelectionTimeoutMS: 10000,
         });
+        
+        try {
+            await client.connect();
+            const hunDb = client.db('hunarmand-prd');
+            externalUser = await hunDb.collection('users').findOne({
+                email: email,
+                rollNumber: rollNo
+            });
+            console.log(`🔍 Hunarmand DB search: email=${email} rollNumber=${rollNo} found=${!!externalUser}`);
+        } catch (dbErr) {
+            console.error('❌ Hunarmand DB error:', dbErr.message);
+            res.status(500);
+            throw new Error('Could not connect to Hunarmand Verification System. Please try again later.');
+        } finally {
+            await client.close();
+        }
 
         if (!externalUser) {
             res.status(401);
