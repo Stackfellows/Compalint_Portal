@@ -184,7 +184,8 @@ router.post('/student-login', apiLimiter, async (req, res, next) => {
 
         let externalUser = null;
         const client = new MongoClient(hunarmandUri, {
-            serverSelectionTimeoutMS: 10000,
+            serverSelectionTimeoutMS: 20000, // Increased for Render cold-start
+            connectTimeoutMS: 20000,
         });
         
         try {
@@ -196,7 +197,9 @@ router.post('/student-login', apiLimiter, async (req, res, next) => {
             });
             console.log(`🔍 Hunarmand DB search: email=${email} rollNumber=${rollNo} found=${!!externalUser}`);
         } catch (dbErr) {
-            console.error('❌ Hunarmand DB error:', dbErr.message);
+            console.error('❌ Hunarmand DB connection error:', dbErr.message);
+            console.error('❌ Hunarmand DB error code:', dbErr.code);
+            console.error('❌ Check: Is Render server IP whitelisted in Atlas Network Access for hunarmand-punjab cluster?');
             res.status(500);
             throw new Error('Could not connect to Hunarmand Verification System. Please try again later.');
         } finally {
